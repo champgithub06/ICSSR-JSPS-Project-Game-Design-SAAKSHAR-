@@ -1,0 +1,65 @@
+import cv2
+import mediapipe as mp
+
+# Initialize Mediapipe for hand detection
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.7)
+mp_drawing = mp.solutions.drawing_utils
+
+# Path to the input video file
+video_path = 'input_video.mp4'  # Replace with your video file name
+
+# Initialize video capture
+cap = cv2.VideoCapture(video_path)
+
+# Check if video opened successfully
+if not cap.isOpened():
+    print(f"Error: Could not open video file {video_path}.")
+    print("Please check the file path and ensure the file exists.")
+    exit()
+
+# Get the width, height, and frames per second (fps) of the video
+width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+fps = cap.get(cv2.CAP_PROP_FPS)
+
+# Define the codec and create VideoWriter object
+output_path = 'output_video.mp4'  # Output video file name
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for mp4 format
+out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+print("Processing video...")
+
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        print("Reached the end of the video or failed to read the frame.")
+        break
+
+    # Convert the frame to RGB for Mediapipe
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    result = hands.process(rgb_frame)
+
+    if result.multi_hand_landmarks:
+        for hand_landmarks in result.multi_hand_landmarks:
+            # Get the bounding box of the hand
+            x_min = min([lm.x for lm in hand_landmarks.landmark]) * width
+            y_min = min([lm.y for lm in hand_landmarks.landmark]) * height
+            x_max = max([lm.x for lm in hand_landmarks.landmark]) * width
+            y_max = max([lm.y for lm in hand_landmarks.landmark]) * height
+
+            # Draw hand bounding box
+            cv2.rectangle(frame, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (255, 0, 0), 2)
+
+            # Draw hand landmarks
+            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+    # Write the frame into the file
+    out.write(frame)
+
+print("Video processing complete. Output saved to:", output_path)
+
+# Release everything when the job is finished
+cap.release()
+out.release()
+cv2.destroyAllWindows()

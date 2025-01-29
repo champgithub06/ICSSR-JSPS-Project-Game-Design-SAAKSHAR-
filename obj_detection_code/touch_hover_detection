@@ -1,0 +1,80 @@
+import cv2
+import numpy as np
+import mediapipe as mp
+
+# Initialize MediaPipe Hands
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.5)
+mp_drawing = mp.solutions.drawing_utils
+
+# Load the videos
+top_view_video = cv2.VideoCapture('topview.mp4')
+side_view_video = cv2.VideoCapture('sideview.mp4')
+
+# Get video properties
+fps = top_view_video.get(cv2.CAP_PROP_FPS)
+frame_width = int(top_view_video.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(top_view_video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+side_frame_width = int(side_view_video.get(cv2.CAP_PROP_FRAME_WIDTH))
+side_frame_height = int(side_view_video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+# Ensure both videos have the same number of frames
+frame_count = int(min(top_view_video.get(cv2.CAP_PROP_FRAME_COUNT), side_view_video.get(cv2.CAP_PROP_FRAME_COUNT)))
+
+# Create a VideoWriter to save the combined video
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+out = cv2.VideoWriter('output_combined_video.mp4', fourcc, fps, (frame_width + side_frame_width, max(frame_height, side_frame_height)))
+
+# Function to detect touch/hover events
+def detect_events(top_frame, side_frame, timestamp):
+    touch_detected = False
+    hover_detected = False
+    touch_coords = None
+    hover_coords = None
+
+    # Process top view frame
+    rgb_top = cv2.cvtColor(top_frame, cv2.COLOR_BGR2RGB)
+    results_top = hands.process(rgb_top)
+
+    if results_top.multi_hand_landmarks:
+        for hand_landmarks in results_top.multi_hand_landmarks:
+            # Get bounding box of the hand
+            x_min = int(min([landmark.x for landmark in hand_landmarks.landmark]) * frame_width)
+            x_max = int(max([landmark.x for landmark in hand_landmarks.landmark]) * frame_width)
+            y_min = int(min([landmark.y for landmark in hand_landmarks.landmark]) * frame_height)
+            y_max = int(max([landmark.y for landmark in hand_landmarks.landmark]) * frame_height)
+
+            touch_coords = (x_min + x_max) // 2, (y_min + y_max) // 2
+            cv2.rectangle(top_frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+            cv2.putText(top_frame, f"{timestamp:.2f}s", (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.putText(top_frame, f"Coords: {touch_coords}", (x_min, y_max + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+            if y_max > frame_height - 30:  # Adjust threshold based on your setup
+                touch_detected = True
+
+    # Process side view frame
+    rgb_side = cv2.cvtColor(side_frame, cv2.COLOR_BGR2RGB)
+    results_side = hands.process(rgb_side)
+
+    if results_side.multi_hand_landmarks:
+        for hand_landmarks in results_side.multi_hand_landmarks:
+            x_min = int(min([landmark.x for landmark in hand_landmarks.landmark]) * side_frame_width)
+            x_max = int(max([landmark.x for landmark in hand_landmarks.landmark]) * side_frame_width)
+            y_min = int(min([landmark.y for landmark in hand_landmarks.landmark]) * side_frame_height)
+            y_max = int(max([landmark.y for landmark in hand_landmarks.landmark]) * side_frame_height)
+
+            hover_coords = (x_min + x_max) // 2, (y_min + y_max) // 2
+            cv2.rectangle(side_frame, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)
+            cv2.putText(side_frame, f"{timestamp:.2f}s", (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+            cv2.putText(side_frame, f"Coords: {hover_coords}", (x_min, y_max + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+            if y_max < side_frame_height - 30 and y_min > 30:  # Adjust threshold based on your setup
+                hover_detected = True
+
+    return top_frame, side_frame, touch_detected, hover_detected, touch_coords, hover_coords
+
+# Release resources
+top_view_video.release()
+side_view_video.release()
+out.release()
+cv2.destroyAllWindows()
